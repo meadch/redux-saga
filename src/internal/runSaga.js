@@ -1,5 +1,6 @@
 import { is, check, uid as nextSagaId, wrapSagaDispatch, noop, log } from './utils'
 import proc from './proc'
+import { stdChannel } from './channel'
 
 const RUN_SAGA_SIGNATURE = 'runSaga(storeInterface, saga, ...args)'
 const NON_GENERATOR_ERR = `${ RUN_SAGA_SIGNATURE }: saga argument must be a Generator function!`
@@ -24,7 +25,8 @@ export function runSaga(
   }
 
   const {
-    subscribe,
+    channel,
+    subscribe = noop,
     dispatch,
     getState,
     context,
@@ -46,9 +48,27 @@ export function runSaga(
     sagaMonitor.effectTriggered({effectId, root: true, parentEffectId: 0, effect: {root: true, saga, args}})
   }
 
+  const chan = channel ? channel : (() => {
+    if (process.env.NODE_ENV === 'development') {
+      // TODO: write better deprecation warning
+      log('warn', `runSaga({ subscribe }, ...) has been deprecated in favor of runSaga({ channel })`)
+    }
+    const chan = stdChannel()
+    const unsubscribe = subscribe(chan.put)
+    return {
+      ...chan,
+      close() {
+        if (is.func(unsubscribe)) {
+          unsubscribe()
+        }
+        chan.close()
+      }
+    }
+  })()
+
   const task = proc(
     iterator,
-    subscribe,
+    chan,
     wrapSagaDispatch(dispatch),
     getState,
     context,

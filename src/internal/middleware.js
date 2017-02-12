@@ -1,5 +1,5 @@
 import { is, check, object, createSetContextWarning } from './utils'
-import { emitter } from './channel'
+import { stdChannel } from './channel'
 import { ident } from './utils'
 import { runSaga } from './runSaga'
 
@@ -22,7 +22,6 @@ export default function sagaMiddlewareFactory({ context = {}, ...options } = {})
           sagaMiddleware.run(saga, ...args)
       `)
     }
-
   }
 
   if(logger && !is.func(logger)) {
@@ -42,12 +41,12 @@ export default function sagaMiddlewareFactory({ context = {}, ...options } = {})
   }
 
   function sagaMiddleware({ getState, dispatch }) {
-    const sagaEmitter = emitter()
-    sagaEmitter.emit = (options.emitter || ident)(sagaEmitter.emit);
+    const channel = stdChannel()
+    channel.put = (options.emitter || ident)(channel.put)
 
     sagaMiddleware.run = runSaga.bind(null, {
       context,
-      subscribe: sagaEmitter.subscribe,
+      channel: channel,
       dispatch,
       getState,
       sagaMonitor,
@@ -60,7 +59,7 @@ export default function sagaMiddlewareFactory({ context = {}, ...options } = {})
         sagaMonitor.actionDispatched(action)
       }
       const result = next(action) // hit reducers
-      sagaEmitter.emit(action)
+      channel.put(action)
       return result
     }
   }
